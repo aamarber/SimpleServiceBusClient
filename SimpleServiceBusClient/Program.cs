@@ -1,8 +1,6 @@
 ﻿using Microsoft.Azure.ServiceBus;
 using Microsoft.Azure.ServiceBus.Core;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Configuration.Json;
-using Microsoft.Extensions.Configuration.FileExtensions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,14 +12,21 @@ namespace SimpleServiceBusClient
 {
     class Program
     {
-        static QueueClient queueClient;
-
-        static IMessageReceiver messageReceiver;
-
         static async Task Main(string[] args)
         {
             try
             {
+                Console.WriteLine(@"
+ _____                     _             ______             
+/  ___|                   (_)            | ___ \            
+\ `--.   ___  _ __ __   __ _   ___  ___  | |_/ / _   _  ___ 
+ `--. \ / _ \| '__|\ \ / /| | / __|/ _ \ | ___ \| | | |/ __|
+/\__/ /|  __/| |    \ V / | || (__|  __/ | |_/ /| |_| |\__ \
+\____/  \___||_|     \_/  |_| \___|\___| \____/  \__,_||___/
+                                                            
+                                                            
+");
+
                 await Start(args);
             }
             catch (Exception ex)
@@ -31,8 +36,16 @@ namespace SimpleServiceBusClient
             finally
             {
                 Console.ReadKey();
-                queueClient.CloseAsync();
             }
+        }
+
+        private static void LogConfigRetrieved(string connectionString, string queueName)
+        {
+            Console.WriteLine($"The configuration is {connectionString} to the queue {queueName}");
+
+            Console.WriteLine("Starting to receive messages...");
+
+            Console.WriteLine();
         }
 
         private static async Task ReceiveMessages(string connectionString, string queueName)
@@ -47,11 +60,23 @@ namespace SimpleServiceBusClient
                 throw new ArgumentNullException(nameof(queueName));
             }
 
-            messageReceiver = new MessageReceiver(connectionString, queueName, ReceiveMode.PeekLock);
+            LogConfigRetrieved(connectionString, queueName);
+
+            var messages = await ReceiveMessages(connectionString, queueName, 50);
+
+            Console.WriteLine(string.Join(",", messages.Select(x => x.metadata.site)));
+        }
+
+        private static async Task<IList<MessageDto>> ReceiveMessages(string connectionString, string queueName, int batchSize)
+        {
+            var messageReceiver = new MessageReceiver(connectionString, queueName, ReceiveMode.PeekLock);
 
             var messages = new List<MessageDto>();
 
-            for (var i = 50; i > 0; i--)
+            var settings = new Newtonsoft.Json.JsonSerializerSettings();
+            settings.MissingMemberHandling = Newtonsoft.Json.MissingMemberHandling.Ignore;
+
+            for (var i = batchSize; i > 0; i--)
             {
                 try
                 {
@@ -59,17 +84,18 @@ namespace SimpleServiceBusClient
 
                     var body = Encoding.UTF8.GetString(message.Body);
 
-                    var settings = new Newtonsoft.Json.JsonSerializerSettings();
-                    settings.MissingMemberHandling = Newtonsoft.Json.MissingMemberHandling.Ignore;
-
                     var m = Newtonsoft.Json.JsonConvert.DeserializeObject<MessageDto>(body.Substring(body.IndexOf("{")), settings);
 
                     messages.Add(m);
+
+                    Console.WriteLine($"Got {messages.Count} until now...");
                 }
-                catch { }
+                catch (Exception e) {
+                    Console.WriteLine($"An error happened: {e}");
+                }
             }
 
-            Console.WriteLine(string.Join(",", messages.Select(x => x.metadata.site)));
+            return messages;
         }
 
         static async Task Start(string[] args)

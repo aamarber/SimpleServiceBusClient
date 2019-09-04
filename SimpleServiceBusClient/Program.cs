@@ -35,6 +35,16 @@ namespace SimpleServiceBusClient
 
         private static async Task ReceiveMessages(string connectionString, string queueName)
         {
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                throw new ArgumentNullException(nameof(connectionString));
+            }
+
+            if (string.IsNullOrEmpty(queueName))
+            {
+                throw new ArgumentNullException(nameof(queueName));
+            }
+
             messageReceiver = new MessageReceiver(connectionString, queueName, ReceiveMode.PeekLock);
 
             var messages = new List<MessageDto>();
@@ -62,22 +72,23 @@ namespace SimpleServiceBusClient
 
         static async Task Start(string[] args)
         {
+            var config = new ConfigurationBuilder()
+                   .AddJsonFile("appsettings.json", true, true)
+                   .Build();
+
+            var connectionString = config["serviceBusConnectionString"];
+
+            var queueName = config["queueName"];
+
+            if(!string.IsNullOrEmpty(connectionString) && !string.IsNullOrEmpty(queueName))
+            {
+                await ReceiveMessages(connectionString, queueName);
+            }
+
             Parser.Default.ParseArguments<ServiceBusConfiguration>(args)
                 .WithParsed(async options =>
                 {
                     await ReceiveMessages(options.ServiceBusConnectionString, options.QueueName);
-                })
-                .WithNotParsed(async options =>
-                {
-                    var config = new ConfigurationBuilder()
-                   .AddJsonFile("appsettings.json", true, true)
-                   .Build();
-
-                    var connectionString = config["serviceBusConnectionString"];
-
-                    var queueName = config["queueName"];
-
-                    await ReceiveMessages(connectionString, queueName);
                 });
         }
     }
